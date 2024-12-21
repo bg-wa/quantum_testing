@@ -18,6 +18,12 @@ source venv/bin/activate
 pip install -r requirements.txt
 ```
 
+## Environment Setup
+1. Create a `.env` file in the project root with your IBM Quantum token:
+```bash
+IBMQ_TOKEN=your_token_here
+```
+
 ## Demonstrations
 
 ### 1. Basic Quantum Circuits (`quantum_demo.py`)
@@ -75,6 +81,18 @@ Run the demo:
 python qaoa_maxcut.py
 ```
 
+### 6. SAT Solver using QAOA (`sat_solver.py`)
+Implements a quantum SAT solver using QAOA:
+- Solves boolean satisfiability problems
+- Uses real IBM Quantum hardware
+- Shows circuit optimization and error mitigation
+- Demonstrates hybrid quantum-classical optimization
+
+Run the demo:
+```bash
+python sat_solver.py
+```
+
 ## Key Features
 - All demonstrations include visualizations
 - Results are shown in single-window displays
@@ -83,7 +101,9 @@ python qaoa_maxcut.py
 
 ## Requirements
 - Python 3.8+
-- Qiskit
+- Qiskit and Qiskit Aer
+- Qiskit IBM Runtime (for real quantum hardware)
+- Python-dotenv (for managing IBM Quantum credentials)
 - NumPy
 - Matplotlib
 - NetworkX (for QAOA)

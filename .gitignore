@@ -9,3 +9,5 @@ venv/
 # ignore Qodo
 .qodo
 .idea
+
+.env
