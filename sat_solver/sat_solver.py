@@ -1,234 +1,236 @@
 from qiskit import QuantumCircuit, QuantumRegister, ClassicalRegister, transpile
-from qiskit_aer import AerSimulator
-from qiskit_ibm_runtime import QiskitRuntimeService
+from qiskit_ibm_runtime import QiskitRuntimeService, Session, Sampler, Options
 import numpy as np
-from itertools import product
-import matplotlib.pyplot as plt
+from typing import List, Tuple
 import os
 from dotenv import load_dotenv
 
 class SATSolver:
-    def __init__(self, clauses, num_vars, use_real_qc=True):
+    def __init__(self, clauses, num_vars, use_ibmq=True):
         """
         Initialize SAT solver with a list of clauses in CNF form
         Args:
             clauses: List of clauses, where each clause is a list of literals
             num_vars: Number of variables in the SAT problem
-            use_real_qc: Whether to use real quantum computer (True) or simulator (False)
+            use_ibmq: Whether to use IBMQ (True) or simulator (False)
         """
         self.clauses = clauses
         self.num_vars = num_vars
-        self.use_real_qc = use_real_qc
+        self.use_ibmq = use_ibmq
         
-        # Initialize backend
-        if self.use_real_qc:
-            # Load IBMQ credentials
+        if self.use_ibmq:
+            # Get IBM Quantum credentials
             load_dotenv()
             token = os.getenv('IBMQ_TOKEN')
             if not token:
-                raise ValueError("IBMQ_TOKEN not found in environment variables")
+                raise ValueError("Please set IBMQ_TOKEN environment variable")
             
             try:
                 # Initialize the Qiskit Runtime Service
                 service = QiskitRuntimeService(channel="ibm_quantum", token=token)
                 
-                # Get least busy backend
+                # Get least busy backend with enough qubits
                 available_backends = service.backends(
                     filters=lambda x: x.status().operational 
-                    and x.configuration().n_qubits >= self.num_vars
+                    and x.configuration().n_qubits >= self.num_vars + 1  # +1 for ancilla
                 )
                 
                 if not available_backends:
                     print("No suitable IBMQ backends available. Falling back to simulator.")
-                    self.use_real_qc = False
+                    self.use_ibmq = False
                     self.backend = AerSimulator()
                 else:
-                    least_busy = sorted(available_backends, 
+                    self.backend = sorted(available_backends, 
                                      key=lambda x: x.status().pending_jobs)[0]
-                    print(f"Selected backend: {least_busy.name}")
-                    self.backend = least_busy
+                    print(f"Selected backend: {self.backend.name}")
             except Exception as e:
-                print(f"Error connecting to IBMQ: {str(e)}")
-                print("Falling back to simulator.")
-                self.use_real_qc = False
+                print(f"Error connecting to IBM Quantum: {str(e)}")
+                print("Falling back to simulator")
+                self.use_ibmq = False
                 self.backend = AerSimulator()
         else:
+            from qiskit_aer import AerSimulator
             self.backend = AerSimulator()
     
-    def create_quantum_circuit(self, gamma, beta):
-        """Create quantum circuit for QAOA"""
-        qr = QuantumRegister(self.num_vars)
-        cr = ClassicalRegister(self.num_vars)
-        qc = QuantumCircuit(qr, cr)
+    def apply_oracle(self, qc: QuantumCircuit, qr: QuantumRegister, anc: QuantumRegister):
+        """Apply the oracle operations to the given circuit"""
+        for i, clause in enumerate(self.clauses):
+            # Create clause verification with unique name
+            clause_anc = QuantumRegister(1, f'clause_anc_{i}')
+            qc.add_register(clause_anc)
+            qc.x(clause_anc)
+            
+            # Check each literal in the clause
+            for var, is_positive in clause:
+                if not is_positive:
+                    qc.x(qr[var])
+                qc.cx(qr[var], clause_anc[0])
+                if not is_positive:
+                    qc.x(qr[var])
+            
+            # If clause is satisfied, flip the phase
+            qc.x(clause_anc)
+            qc.h(anc)
+            qc.cx(clause_anc[0], anc[0])
+            qc.h(anc)
+            qc.x(clause_anc)
+            
+            # Uncompute clause ancilla
+            for var, is_positive in reversed(clause):
+                if not is_positive:
+                    qc.x(qr[var])
+                qc.cx(qr[var], clause_anc[0])
+                if not is_positive:
+                    qc.x(qr[var])
+    
+    def create_grover_circuit(self, num_iterations=2) -> QuantumCircuit:
+        """Create complete Grover's algorithm circuit"""
+        # Create quantum registers
+        qr = QuantumRegister(self.num_vars, 'q')
+        anc = QuantumRegister(1, 'ancilla')
+        cr = ClassicalRegister(self.num_vars, 'c')
+        qc = QuantumCircuit(qr, anc, cr)
         
-        # Initial state
+        # Initialize all qubits in superposition
         qc.h(qr)
+        qc.x(anc)
+        qc.h(anc)
         
-        # Cost Hamiltonian
-        for clause in self.clauses:
-            # Convert clause to list of indices and signs
-            indices = []
-            signs = []
-            for literal in clause:
-                if literal > 0:
-                    indices.append(literal - 1)
-                    signs.append(1)
-                else:
-                    indices.append(abs(literal) - 1)
-                    signs.append(-1)
+        # Grover iteration
+        for _ in range(num_iterations):
+            # Oracle
+            self.apply_oracle(qc, qr, anc)
             
-            # Apply phase rotations based on clause satisfaction
-            for i in range(len(indices)):
-                if signs[i] == -1:
-                    qc.x(indices[i])
-            
-            # Multi-control phase rotation
-            if len(indices) == 1:
-                qc.rz(2 * gamma, indices[0])
-            elif len(indices) == 2:
-                qc.cx(indices[0], indices[1])
-                qc.rz(2 * gamma, indices[1])
-                qc.cx(indices[0], indices[1])
-            else:  # len(indices) == 3
-                # Use CNOT decomposition for Toffoli to improve fidelity
-                qc.h(indices[2])
-                qc.cx(indices[1], indices[2])
-                qc.tdg(indices[2])
-                qc.cx(indices[0], indices[2])
-                qc.t(indices[2])
-                qc.cx(indices[1], indices[2])
-                qc.tdg(indices[2])
-                qc.cx(indices[0], indices[2])
-                qc.t(indices[2])
-                qc.h(indices[2])
-                
-                qc.rz(2 * gamma, indices[2])
-                
-                # Inverse Toffoli decomposition
-                qc.h(indices[2])
-                qc.t(indices[2])
-                qc.cx(indices[0], indices[2])
-                qc.tdg(indices[2])
-                qc.cx(indices[1], indices[2])
-                qc.t(indices[2])
-                qc.cx(indices[0], indices[2])
-                qc.tdg(indices[2])
-                qc.cx(indices[1], indices[2])
-                qc.h(indices[2])
-            
-            # Restore basis
-            for i in range(len(indices)):
-                if signs[i] == -1:
-                    qc.x(indices[i])
-        
-        # Mixer Hamiltonian
-        for i in range(self.num_vars):
-            qc.rx(2 * beta, i)
+            # Diffusion operator
+            qc.h(qr)
+            qc.x(qr)
+            qc.h(qr[self.num_vars-1])
+            qc.mcx(qr[:-1], qr[self.num_vars-1])  # Using mcx instead of deprecated mct
+            qc.h(qr[self.num_vars-1])
+            qc.x(qr)
+            qc.h(qr)
         
         # Measure
         qc.measure(qr, cr)
         
         return qc
     
-    def solve(self, steps=3, shots=1000):
+    def solve(self, shots=1024):
         """
-        Solve SAT problem using QAOA
-        Args:
-            steps: Number of QAOA steps
-            shots: Number of circuit executions
+        Solve SAT problem using Grover's algorithm
         Returns:
             Best assignment found and its score
         """
-        best_score = -float('inf')
-        best_assignment = None
+        # Calculate optimal number of iterations
+        n = self.num_vars
+        num_iterations = max(1, int(np.pi/4 * np.sqrt(2**n)))
         
-        # Fewer parameter points for real hardware to reduce runtime
-        gamma_points = 3 if self.use_real_qc else 4
-        beta_points = 3 if self.use_real_qc else 4
+        # Create the circuit
+        qc = self.create_grover_circuit(num_iterations)
         
-        for step in range(steps):
-            print(f"\nStep {step + 1}/{steps}")
+        if self.use_ibmq:
+            # Use IBMQ backend with runtime
+            with Session(backend=self.backend) as session:
+                # Transpile the circuit for the backend
+                qc_transpiled = transpile(qc, backend=self.backend)
+                
+                sampler = Sampler()  # Create the sampler within the session
+                job = sampler.run([qc_transpiled], shots=shots)
+                print(f"Job ID: {job.job_id()}")
+                print("Waiting for job completion...")
+                result = job.result()
+                
+                # Extract bitstring from the result
+                bitarray = result[0].data.c._array
+                counts = {}
+                for bitstring in map(lambda x: ''.join(str(int(bit)) for bit in x), bitarray):
+                    counts[bitstring] = counts.get(bitstring, 0) + 1
+        else:
+            # Use simulator
+            job = self.backend.run(qc, shots=shots)
+            result = job.result()
+            counts = result.get_counts()
+        
+        # Find the most frequent measurement
+        max_count = 0
+        best_bitstring = None
+        for bitstring in counts:
+            if counts[bitstring] > max_count:
+                max_count = counts[bitstring]
+                best_bitstring = bitstring
+        
+        # Convert bitstring to solution
+        if best_bitstring:
+            # For IBMQ results, convert from integer to binary string
+            if self.use_ibmq:
+                best_bitstring = format(int(best_bitstring), f'0{self.num_vars}b')
             
-            # Linear parameter schedules
-            gamma_vals = np.linspace(0.1, np.pi, gamma_points)
-            beta_vals = np.linspace(0.1, np.pi/2, beta_points)
-            
-            for gamma in gamma_vals:
-                for beta in beta_vals:
-                    # Create and run circuit
-                    qc = self.create_quantum_circuit(gamma, beta)
-                    transpiled_qc = transpile(qc, backend=self.backend, optimization_level=3)
-                    
-                    # Print circuit stats
-                    print(f"\nCircuit depth: {transpiled_qc.depth()}")
-                    print(f"Circuit gates: {transpiled_qc.count_ops()}")
-                    
-                    # Run the circuit
-                    job = self.backend.run(transpiled_qc, shots=shots)
-                    
-                    if self.use_real_qc:
-                        print(f"Job ID: {job.job_id()}")
-                        print("Waiting for job completion...")
-                    
-                    result = job.result()
-                    counts = result.get_counts()
-                    
-                    # Analyze results
-                    for bitstring in counts:
-                        if counts[bitstring] > shots/100:  # Filter out noise
-                            assignment = [1 if bit == '1' else -1 for bit in bitstring[::-1]]
-                            score = self.evaluate_assignment(assignment)
-                            if score > best_score:
-                                best_score = score
-                                best_assignment = assignment
-                                print(f"New best assignment found! Score: {score}")
+            solution = [bit == '1' for bit in best_bitstring[:self.num_vars]]
+            # Verify if it's a valid solution
+            if self.verify_solution(solution):
+                return True, solution
         
-        # Clean up IBM Quantum
-        if self.use_real_qc:
-            pass  # No need to delete account
-        
-        return best_assignment, best_score
+        return False, []
     
-    def evaluate_assignment(self, assignment):
-        """
-        Evaluate an assignment
-        Args:
-            assignment: List of 1 and -1 values for each variable
-        Returns:
-            Number of satisfied clauses
-        """
-        score = 0
+    def verify_solution(self, assignment):
+        """Verify if an assignment satisfies all clauses"""
         for clause in self.clauses:
             # Check if clause is satisfied
             satisfied = False
-            for literal in clause:
-                var_idx = abs(literal) - 1
-                var_val = assignment[var_idx]
-                if literal < 0:
-                    var_val = -var_val
-                if var_val == 1:
+            for var, is_positive in clause:
+                if assignment[var] == is_positive:
                     satisfied = True
                     break
-            if satisfied:
-                score += 1
-        return score
+            if not satisfied:
+                return False
+        return True
+
+def parse_dimacs(dimacs_str: str) -> List[List[Tuple[int, bool]]]:
+    """
+    Parse a DIMACS CNF format string into a clause list.
+    
+    Args:
+        dimacs_str: DIMACS CNF format string
+    
+    Returns:
+        List[List[Tuple[int, bool]]]: Clause list
+    """
+    clauses = []
+    for line in dimacs_str.strip().split('\n'):
+        line = line.strip()
+        if line and not line.startswith('c') and not line.startswith('p'):
+            clause = []
+            for lit in line.split()[:-1]:  # Ignore the trailing 0
+                var = int(lit)
+                clause.append((abs(var) - 1, var > 0))
+            clauses.append(clause)
+    return clauses
 
 def main():
-    # Example SAT problem: (x1 OR x2) AND (NOT x1 OR x3) AND (NOT x2 OR NOT x3)
-    clauses = [[1, 2], [-1, 3], [-2, -3]]
-    num_vars = 3
+    # Example SAT problem in DIMACS CNF format
+    # This represents (x1 OR x2) AND (NOT x1 OR x2)
+    dimacs = """
+    c Example SAT problem
+    p cnf 2 2
+    1 2 0
+    -1 2 0
+    """
     
-    print("Solving SAT problem:")
+    # Parse the DIMACS format
+    clauses = parse_dimacs(dimacs)
+    
+    print("Solving SAT problem...")
     print("Clauses:", clauses)
-    print("Number of variables:", num_vars)
+    solver = SATSolver(clauses, 2, use_ibmq=True)  # Use IBMQ backend
+    is_sat, solution = solver.solve(shots=1024)
     
-    # Use real quantum computer
-    solver = SATSolver(clauses, num_vars, use_real_qc=True)
-    assignment, score = solver.solve(steps=2, shots=1000)  # Reduced steps for real hardware
-    
-    print("\nFinal Results:")
-    print("Best assignment:", ["x%d=%d" % (i+1, 1 if x == 1 else 0) for i, x in enumerate(assignment)])
-    print("Satisfied clauses:", score, "out of", len(clauses))
+    if is_sat:
+        print("Solution found!")
+        print("Variable assignments:", ["x%d=%d" % (i+1, int(x)) for i, x in enumerate(solution)])
+    else:
+        print("No solution exists.")
 
 if __name__ == "__main__":
+    # Load environment variables
+    load_dotenv()
     main()
