@@ -1,0 +1,11 @@
+# Ignore Python bytecode files
+__pycache__/
+*.py[cod]
+
+# Ignore Python virtual environments
+venv/
+.env/
+
+# ignore Qodo
+.qodo
+.idea
