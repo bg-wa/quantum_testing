@@ -1,16 +1,32 @@
-# Quantum Computing Demonstrations
+# Quantum Algorithm Implementations
 
-This project contains several quantum computing demonstrations using IBM's Qiskit framework. Each example showcases different fundamental aspects of quantum computing and quantum algorithms.
+This repository contains implementations of various quantum algorithms using Qiskit. Each algorithm is organized in its own directory with specific dependencies and documentation.
 
-## Setup
-1. Create a virtual environment:
+## Project Structure
+
+- `graph_isomorphism/` - Quantum algorithm for testing graph isomorphism
+- `grover_search/` - Implementation of Grover's search algorithm
+- `phase_estimation/` - Quantum phase estimation algorithm
+- `qaoa_maxcut/` - QAOA solver for the MaxCut problem
+- `quantum_demo/` - Basic quantum computing demonstrations
+- `quantum_fourier/` - Quantum Fourier Transform implementation
+- `quantum_period_finding/` - Quantum period finding algorithm
+- `sat_solver/` - Quantum SAT solver
+- `tsp_solver/` - Quantum solver for Traveling Salesman Problem
+
+## Getting Started
+
+Each project has its own `requirements.txt` and setup instructions. To get started with a specific algorithm:
+
+1. Navigate to the algorithm's directory:
 ```bash
-python3 -m venv venv
+cd algorithm_name
 ```
 
-2. Activate the virtual environment:
+2. Create a virtual environment:
 ```bash
-source venv/bin/activate
+python -m venv venv
+source venv/bin/activate  # On Linux/Mac
 ```
 
 3. Install dependencies:
@@ -18,103 +34,33 @@ source venv/bin/activate
 pip install -r requirements.txt
 ```
 
-## Environment Setup
-1. Create a `.env` file in the project root with your IBM Quantum token:
-```bash
+4. Set up IBM Quantum credentials:
+Create a `.env` file with your IBM Quantum token:
+```
 IBMQ_TOKEN=your_token_here
 ```
 
-## Demonstrations
+## Common Dependencies
 
-### 1. Basic Quantum Circuits (`quantum_demo.py`)
-Demonstrates fundamental quantum computing concepts:
-- Quantum superposition using Hadamard gates
-- Quantum entanglement using Bell states
-- Basic quantum measurements
+All projects use:
+- Qiskit 0.45.0
+- Qiskit IBM Runtime 0.11.0
+- Qiskit Aer 0.12.2
 
-Run the demo:
-```bash
-python quantum_demo.py
-```
+Additional dependencies are specified in each project's `requirements.txt` file.
 
-### 2. Grover's Search Algorithm (`grover_search.py`)
-Implements Grover's quantum search algorithm:
-- Searches for a marked state in a quantum superposition
-- Demonstrates quadratic speedup over classical search
-- Shows amplitude amplification of the target state
+## Features
 
-Run the demo:
-```bash
-python grover_search.py
-```
+- Real quantum hardware support via IBM Quantum
+- Automatic fallback to simulation
+- Error mitigation techniques
+- Visualization tools
+- Performance analysis utilities
 
-### 3. Quantum Fourier Transform (`quantum_fourier.py`)
-Demonstrates the Quantum Fourier Transform (QFT):
-- Quantum version of the classical Fourier transform
-- Shows how QFT transforms quantum states
-- Includes visualization of the transformed states
+## Contributing
 
-Run the demo:
-```bash
-python quantum_fourier.py
-```
+Feel free to open issues or submit pull requests for improvements to any of the implementations.
 
-### 4. Quantum Phase Estimation (`phase_estimation.py`)
-Implements Quantum Phase Estimation (QPE):
-- Estimates eigenvalues of quantum operators
-- Uses QFT as a key component
-- Shows increasing precision with more qubits
+## License
 
-Run the demo:
-```bash
-python phase_estimation.py
-```
-
-### 5. QAOA for MaxCut (`qaoa_maxcut.py`)
-Implements the Quantum Approximate Optimization Algorithm:
-- Solves the MaxCut graph partitioning problem
-- Demonstrates hybrid quantum-classical optimization
-- Visualizes the problem graph and solution
-
-Run the demo:
-```bash
-python qaoa_maxcut.py
-```
-
-### 6. SAT Solver using QAOA (`sat_solver.py`)
-Implements a quantum SAT solver using QAOA:
-- Solves boolean satisfiability problems
-- Uses real IBM Quantum hardware
-- Shows circuit optimization and error mitigation
-- Demonstrates hybrid quantum-classical optimization
-
-Run the demo:
-```bash
-python sat_solver.py
-```
-
-## Key Features
-- All demonstrations include visualizations
-- Results are shown in single-window displays
-- Each example includes detailed output and explanations
-- Implementations follow Qiskit best practices
-
-## Requirements
-- Python 3.8+
-- Qiskit and Qiskit Aer
-- Qiskit IBM Runtime (for real quantum hardware)
-- Python-dotenv (for managing IBM Quantum credentials)
-- NumPy
-- Matplotlib
-- NetworkX (for QAOA)
-- SciPy (for optimization)
-
-## Notes
-- These demonstrations run on Qiskit's QASM simulator
-- Results may vary slightly between runs due to the probabilistic nature of quantum measurements
-- The number of qubits and circuit depths are chosen to be suitable for simulation on classical hardware
-
-## References
-- [Qiskit Documentation](https://qiskit.org/documentation/)
-- [IBM Quantum Computing](https://quantum-computing.ibm.com/)
-- Matthew Brisse's work on practical quantum computing applications
+This project is licensed under the MIT License - see the LICENSE file for details.
