@@ -1,12 +1,14 @@
 # Quantum SAT Solver
 
-This project implements a quantum algorithm for solving Boolean Satisfiability (SAT) problems. It uses a hybrid quantum-classical approach combining QAOA principles with SAT-specific optimizations.
+This project implements a quantum algorithm for solving Boolean Satisfiability (SAT) problems using Grover's algorithm. It can run on both local simulators and real quantum hardware through IBM Quantum.
 
 ## Requirements
 
-- Python 3.8+
-- Qiskit 0.45.0
-- IBM Quantum account (for running on real quantum hardware)
+- Python 3.11+
+- Qiskit 1.3.1
+- qiskit-ibm-runtime 0.34.0
+- qiskit-aer 0.13.3
+- Other dependencies listed in `requirements.txt`
 
 ## Installation
 
@@ -29,50 +31,65 @@ IBMQ_TOKEN=your_token_here
 
 ## Usage
 
-The implementation can solve SAT problems in CNF form:
+The solver can handle SAT problems in CNF form. Here's an example:
 
 ```python
-from sat_solver import QuantumSATSolver
+from sat_solver import SATSolver
 
-# Define a SAT problem in CNF form
+# Example SAT problem: (x1 OR x2) AND (NOT x1 OR x2)
 clauses = [
-    [1, -2, 3],  # x1 OR NOT x2 OR x3
-    [-1, 2, 4],  # NOT x1 OR x2 OR x4
-    [2, -3, -4]  # x2 OR NOT x3 OR NOT x4
+    [(0, True), (1, True)],      # x1 OR x2
+    [(0, False), (1, True)]      # NOT x1 OR x2
 ]
 
-# Create solver instance
-solver = QuantumSATSolver(clauses)
+# Create solver instance (use_ibmq=True to use IBMQ backend)
+solver = SATSolver(clauses, use_ibmq=True)
 
-# Solve the problem
-result = solver.solve()
-print(f"Satisfying assignment: {result.assignment}")
-print(f"Is satisfiable: {result.is_satisfiable}")
+# Solve with specified number of shots
+is_sat, solution = solver.solve(shots=1024)
+
+if is_sat:
+    print("Solution found!")
+    print("Variable assignments:", solution)
+else:
+    print("No solution found.")
 ```
 
 ## Features
 
+- Quantum circuit implementation using Grover's algorithm
+- Support for both local simulator and IBMQ quantum hardware
+- Automatic backend selection based on required qubits
+- Circuit transpilation for optimal execution
+- Error handling and graceful fallback to simulator
 - Support for CNF formula input
-- Quantum circuit optimization for SAT problems
-- Hybrid quantum-classical solving approach
-- Multiple solving strategies:
-  - Pure quantum approach
-  - QAOA-based solver
-  - Hybrid decomposition
 - Solution verification
-- Performance analysis tools
 
 ## Implementation Details
 
-The algorithm implements:
-1. Problem encoding into quantum Hamiltonian
-2. Circuit construction for clause satisfaction
-3. Optimization of quantum parameters
-4. Measurement and classical post-processing
-5. Solution verification
+The solver implements:
 
-Optimizations include:
-- Clause reduction techniques
-- Dynamic circuit depth adjustment
-- Error mitigation strategies
-- Classical preprocessing
+1. **Oracle Construction**: Creates a quantum oracle that marks satisfying assignments
+2. **Grover's Algorithm**: Applies amplitude amplification to find solutions
+3. **IBMQ Integration**: 
+   - Automatic selection of least busy backend
+   - Circuit transpilation for the target hardware
+   - Session management for efficient job execution
+4. **Result Processing**:
+   - Measurement aggregation
+   - Classical post-processing
+   - Solution verification
+
+## Error Mitigation
+
+The implementation includes several error mitigation strategies:
+- Circuit optimization through transpilation
+- Automatic fallback to simulator if no suitable quantum backend is available
+- Session-based execution to reduce overhead
+- Multiple shots to improve reliability
+
+## Limitations
+
+- The number of variables in the SAT problem is limited by the available qubits on the quantum hardware
+- Real quantum hardware may have longer execution times due to queue times
+- Results may contain some noise, especially on real quantum hardware
